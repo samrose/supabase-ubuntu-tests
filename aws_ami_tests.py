@@ -205,12 +205,12 @@ class TestPostgreSQLExtensions(AMISystemTest):
         assert len(missing_extensions) == 0, f"Missing extensions: {missing_extensions}"
 
     @pytest.mark.parametrize("extension", [
-        'pg_stat_statements', 'pgaudit'
+        'pg_cron'
     ])
     def test_extension_loading(self, extension):
         """Test individual extensions can be loaded"""
         try:
-            self._execute_sql(f"CREATE EXTENSION IF NOT EXISTS {extension};")
+            self._execute_sql(f"CREATE EXTENSION IF NOT EXISTS {extension} with schema extensions;")
             
             # Verify extension is loaded
             result = self._execute_sql(
