@@ -33,10 +33,10 @@ class AMITestConfig:
 
 class AMISystemTest:
     """Base class for AWS AMI system testing"""
-    
-    def __init__(self):
+
+    def setup_method(self):
         self.config = AMITestConfig()
-        
+
     def _execute_sql(self, sql: str, database: str = None) -> List[Tuple]:
         """Execute SQL and return results"""
         db = database or self.config.postgres_db
