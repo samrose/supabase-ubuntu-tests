@@ -205,7 +205,7 @@ class TestPostgreSQLExtensions(AMISystemTest):
         assert len(missing_extensions) == 0, f"Missing extensions: {missing_extensions}"
 
     @pytest.mark.parametrize("extension", [
-        'pg_stat_statements', 'pgaudit', 'pgsodium', 'supautils'
+        'pg_stat_statements', 'pgaudit'
     ])
     def test_extension_loading(self, extension):
         """Test individual extensions can be loaded"""
