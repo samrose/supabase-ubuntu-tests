@@ -41,14 +41,6 @@
           cp ${amiTestFile} aws_ami_tests.py
           chmod +x aws_ami_tests.py
           
-          # Create virtual environment
-          echo "📦 Creating Python virtual environment..."
-          ${pythonEnv}/bin/python -m venv venv
-          source venv/bin/activate
-          
-          # Install additional dependencies if needed
-          pip install --quiet pytest psycopg2-binary requests
-          
           # Set environment variables from system if available
           export POSTGRES_PASSWORD=''${POSTGRES_PASSWORD:-postgres}
           export POSTGRES_USER=''${POSTGRES_USER:-postgres}
@@ -58,7 +50,7 @@
           echo "Working directory: $WORK_DIR"
           
           # Run tests with detailed output
-          if python -m pytest aws_ami_tests.py -v --tb=short --color=yes; then
+          if ${pythonEnv}/bin/python -m pytest aws_ami_tests.py -v --tb=short --color=yes; then
             echo "✅ All AMI tests passed!"
             EXIT_CODE=0
           else
@@ -67,7 +59,6 @@
           fi
           
           # Cleanup
-          deactivate
           cd /
           rm -rf "$WORK_DIR"
           
@@ -101,14 +92,6 @@
           cp ${dockerTestFile} docker_container_tests.py
           chmod +x docker_container_tests.py
           
-          # Create virtual environment
-          echo "📦 Creating Python virtual environment..."
-          ${pythonEnv}/bin/python -m venv venv
-          source venv/bin/activate
-          
-          # Install additional dependencies
-          pip install --quiet pytest psycopg2-binary requests docker
-          
           echo "🧪 Running Docker container tests..."
           echo "Working directory: $WORK_DIR"
           
@@ -117,7 +100,7 @@
           docker pull supabase/postgres:15-latest || echo "⚠️  Could not pull supabase/postgres:15-latest"
           
           # Run tests with detailed output
-          if python -m pytest docker_container_tests.py -v --tb=short --color=yes; then
+          if ${pythonEnv}/bin/python -m pytest docker_container_tests.py -v --tb=short --color=yes; then
             echo "✅ All Docker tests passed!"
             EXIT_CODE=0
           else
@@ -131,7 +114,6 @@
           docker network ls --filter "name=supabase_test_" --format "{{.ID}}" | xargs -r docker network rm
           
           # Cleanup working directory
-          deactivate
           cd /
           rm -rf "$WORK_DIR"
           
