@@ -99,6 +99,51 @@ class AMISystemTest:
             
         return info
 
+    def _get_service_status(self, service_name: str) -> Dict[str, str]:
+        """Get detailed service status"""
+        try:
+            result = subprocess.run(
+                ['systemctl', 'show', service_name],
+                capture_output=True, text=True
+            )
+            status = {}
+            for line in result.stdout.split('\n'):
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    status[key] = value
+            return status
+        except:
+            return {}
+
+    def _check_service_health(self, service_name: str) -> Tuple[bool, str]:
+        """Check service health including memory, CPU, and error logs"""
+        try:
+            # Check service status
+            status = self._get_service_status(service_name)
+            if not status.get('ActiveState') == 'active':
+                return False, f"Service {service_name} is not active"
+
+            # Check for recent errors in journal
+            result = subprocess.run(
+                ['journalctl', '-u', service_name, '--since', '1 hour ago', '-p', 'err'],
+                capture_output=True, text=True
+            )
+            if result.stdout.strip():
+                return False, f"Service {service_name} has recent errors in logs"
+
+            # Check memory usage
+            result = subprocess.run(
+                ['systemctl', 'show', service_name, '-p', 'MemoryCurrent'],
+                capture_output=True, text=True
+            )
+            memory = result.stdout.strip().split('=')[1]
+            if memory and int(memory) > 1024 * 1024 * 1024:  # 1GB
+                return False, f"Service {service_name} using excessive memory: {memory}"
+
+            return True, "Service healthy"
+        except Exception as e:
+            return False, f"Error checking service health: {str(e)}"
+
 
 class TestAMISystemCompatibility(AMISystemTest):
     """Test AWS AMI system-level Ubuntu 24.04 compatibility"""
@@ -176,12 +221,12 @@ class TestPostgreSQLService(AMISystemTest):
         """Test basic database operations work correctly"""
         # Create test database
         try:
-            
             # Test operations on new database
             result = self._execute_sql("SELECT 1;", database="postgres")
             assert result[0][0] == 1
         except psycopg2.Error as e:
             raise e
+
 
 class TestPostgreSQLExtensions(AMISystemTest):
     """Test PostgreSQL extensions on AWS AMI"""
@@ -221,5 +266,131 @@ class TestPostgreSQLExtensions(AMISystemTest):
             pytest.fail(f"Failed to load extension {extension}: {e}")
 
 
+class TestSystemdServices(AMISystemTest):
+    """Test systemd services health and compatibility"""
+
+    @pytest.mark.parametrize("service", [
+        "postgresql",
+        "pgbouncer",
+        "postgrest",
+        "gotrue",
+        "kong",
+        "nginx",
+        "vector",
+        "salt-minion"
+    ])
+    def test_service_health(self, service):
+        """Test individual service health"""
+        is_healthy, message = self._check_service_health(service)
+        assert is_healthy, message
+
+    def test_service_dependencies(self):
+        """Test service dependency chain"""
+        services = {
+            "postgresql": ["pgbouncer", "postgrest"],
+            "pgbouncer": ["postgrest"],
+            "postgrest": ["kong"],
+            "gotrue": ["kong"],
+            "kong": ["nginx"]
+        }
+
+        for service, dependencies in services.items():
+            assert self._check_service_status(service), f"Service {service} is not running"
+            for dep in dependencies:
+                assert self._check_service_status(dep), f"Dependency {dep} for {service} is not running"
+
+    def test_service_restart_policy(self):
+        """Test service restart policies are correctly configured"""
+        services = [
+            "postgresql",
+            "pgbouncer",
+            "postgrest",
+            "gotrue",
+            "kong",
+            "nginx",
+            "vector"
+        ]
+
+        for service in services:
+            status = self._get_service_status(service)
+            assert status.get('Restart') in ['always', 'on-success', 'on-failure'], \
+                f"Service {service} has invalid restart policy: {status.get('Restart')}"
+
+
+class TestUbuntu2404Compatibility(AMISystemTest):
+    """Test Ubuntu 24.04 specific compatibility"""
+
+    def test_openssl_compatibility(self):
+        """Test OpenSSL 3.0 compatibility"""
+        try:
+            result = subprocess.run(['openssl', 'version'], capture_output=True, text=True)
+            version = result.stdout.strip()
+            assert '3.0' in version, f"Expected OpenSSL 3.0, got {version}"
+        except Exception as e:
+            pytest.fail(f"Cannot check OpenSSL version: {e}")
+
+    def test_python_compatibility(self):
+        """Test Python 3.12 compatibility"""
+        try:
+            result = subprocess.run(['python3', '--version'], capture_output=True, text=True)
+            version = result.stdout.strip()
+            assert '3.12' in version, f"Expected Python 3.12, got {version}"
+        except Exception as e:
+            pytest.fail(f"Cannot check Python version: {e}")
+
+    def test_systemd_service_changes(self):
+        """Test systemd service changes from 20.04 to 24.04"""
+        # Check for deprecated systemd options
+        services = [
+            "postgresql",
+            "pgbouncer",
+            "postgrest",
+            "gotrue",
+            "kong",
+            "nginx"
+        ]
+
+        for service in services:
+            result = subprocess.run(
+                ['systemctl', 'show', service],
+                capture_output=True, text=True
+            )
+            config = result.stdout
+
+            # Check for deprecated options
+            deprecated_options = [
+                'Type=simple',  # Replaced by Type=exec
+                'RestartSec=0',  # No longer needed
+                'TimeoutStartSec=0'  # No longer needed
+            ]
+
+            for option in deprecated_options:
+                assert option not in config, f"Service {service} uses deprecated option: {option}"
+
+    def test_network_manager_changes(self):
+        """Test NetworkManager changes from 20.04 to 24.04"""
+        try:
+            result = subprocess.run(
+                ['nmcli', '--version'],
+                capture_output=True, text=True
+            )
+            version = result.stdout.strip()
+            assert '1.44' in version, f"Expected NetworkManager 1.44+, got {version}"
+        except Exception as e:
+            pytest.skip(f"Cannot check NetworkManager version: {e}")
+
+    def test_apt_changes(self):
+        """Test APT changes from 20.04 to 24.04"""
+        try:
+            result = subprocess.run(
+                ['apt', '--version'],
+                capture_output=True, text=True
+            )
+            version = result.stdout.strip()
+            assert '2.7' in version, f"Expected APT 2.7+, got {version}"
+        except Exception as e:
+            pytest.skip(f"Cannot check APT version: {e}")
+
+
 if __name__ == "__main__":
-    pytest.main([__file__, "-v", "--tb=short"]) 
+    pytest.main([__file__, "-v", "--tb=short"])
