@@ -190,7 +190,7 @@ class TestPostgreSQLExtensions(AMISystemTest):
         """Test core Supabase extensions are available"""
         extensions = [
             'pg_stat_statements', 'pgaudit', 'pg_cron', 'postgis',
-            'pgtap', 'pgvector', 'pgsodium', 'supautils'
+            'pgtap', 'vector', 'pgsodium'
         ]
         
         # Get available extensions
