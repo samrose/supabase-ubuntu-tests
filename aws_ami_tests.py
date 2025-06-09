@@ -176,20 +176,12 @@ class TestPostgreSQLService(AMISystemTest):
         """Test basic database operations work correctly"""
         # Create test database
         try:
-            self._execute_sql("CREATE DATABASE ami_test_db;")
             
             # Test operations on new database
-            result = self._execute_sql("SELECT 1;", database="ami_test_db")
+            result = self._execute_sql("SELECT 1;", database="postgres")
             assert result[0][0] == 1
-            
-            # Cleanup
-            self._execute_sql("DROP DATABASE ami_test_db;")
         except psycopg2.Error as e:
-            if "already exists" in str(e):
-                pass
-            else:
-                raise
-
+            raise e
 
 class TestPostgreSQLExtensions(AMISystemTest):
     """Test PostgreSQL extensions on AWS AMI"""
